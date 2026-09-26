@@ -78,16 +78,29 @@
     .upcoming .in { display: block; color: var(--accent); font-size: 12px; }
 
     footer { margin-top: 32px; font-size: 11px; color: var(--muted); }
+
+    .lang { display: inline-flex; margin-bottom: 24px; border: 1px solid var(--line); border-radius: 16px; padding: 2px; }
+    .lang button {
+      background: none; border: 0; color: var(--muted); font: inherit; font-size: 11px;
+      letter-spacing: .1em; padding: 4px 12px; border-radius: 14px; cursor: pointer;
+    }
+    .lang button:hover { color: var(--ink); }
+    .lang button[aria-pressed="true"] { background: var(--line); color: var(--ink); }
+    .lang button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </style>
 </head>
 <body>
   <main>
-    <div class="date">
-      <button id="prev" aria-label="Previous day">‹</button>
-      <span id="date"></span>
-      <button id="next" aria-label="Next day">›</button>
+    <div class="lang" role="group" aria-label="Language / Språk">
+      <button data-lang="en" lang="en" aria-pressed="false">EN</button>
+      <button data-lang="no" lang="nb" aria-pressed="false">NO</button>
     </div>
-    <div class="date" style="margin-top:8px"><button id="today" hidden>Back to today</button></div>
+    <div class="date">
+      <button id="prev" data-i18n-label="prev">‹</button>
+      <span id="date"></span>
+      <button id="next" data-i18n-label="next">›</button>
+    </div>
+    <div class="date" style="margin-top:8px"><button id="today" data-i18n="backToToday" hidden></button></div>
 
     <svg class="moon" viewBox="-110 -110 220 220" role="img" aria-labelledby="phase">
       <defs>
@@ -105,32 +118,48 @@
     <p class="sub" id="sub"></p>
 
     <dl class="stats">
-      <div><dt>Illuminated</dt><dd id="illum"></dd></div>
-      <div><dt>Moon age</dt><dd id="age"></dd></div>
-      <div><dt>Trend</dt><dd id="trend"></dd></div>
+      <div><dt data-i18n="illuminated"></dt><dd id="illum"></dd></div>
+      <div><dt data-i18n="moonAge"></dt><dd id="age"></dd></div>
+      <div><dt data-i18n="trend"></dt><dd id="trend"></dd></div>
     </dl>
 
-    <h2>Coming up</h2>
+    <h2 data-i18n="comingUp"></h2>
     <ol class="upcoming" id="upcoming"></ol>
 
-    <footer>Computed in your browser · times in your local time zone</footer>
+    <footer data-i18n="footer"></footer>
   </main>
 
   <script type="module">
     import { litPath, moonInfo } from './moon.js';
+    import { LANGS, STRINGS, detectLang } from './i18n.js';
 
     const $ = (id) => document.getElementById(id);
     const DAY = 86400000;
     let offset = 0; // days from today
 
-    const dateFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const whenFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+    let t, dateFmt, whenFmt, timeFmt, ageFmt, pctFmt;
+
+    function setLang(lang) {
+      t = STRINGS[lang];
+      // English keeps the browser's own English variant (US vs UK dates); Norwegian is nb-NO.
+      const locale = lang === 'no' ? 'nb-NO'
+        : navigator.languages.find((l) => l.toLowerCase().startsWith('en')) ?? 'en';
+      dateFmt = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      whenFmt = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      timeFmt = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+      ageFmt = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      pctFmt = new Intl.NumberFormat(locale, { style: 'percent' });
+
+      document.documentElement.lang = t.htmlLang;
+      document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t[el.dataset.i18n]; });
+      document.querySelectorAll('[data-i18n-label]').forEach((el) => { el.setAttribute('aria-label', t[el.dataset.i18nLabel]); });
+      document.querySelectorAll('[data-lang]').forEach((b) => { b.setAttribute('aria-pressed', b.dataset.lang === lang); });
+    }
 
     function relDays(ms) {
       const d = Math.round(ms / DAY);
-      if (d === 0) return ms > 0 ? `in ${Math.max(1, Math.round(ms / 3600000))} h` : '';
-      return d === 1 ? 'tomorrow' : `in ${d} days`;
+      if (d === 0) return ms > 0 ? t.inHours(Math.max(1, Math.round(ms / 3600000))) : '';
+      return d === 1 ? t.tomorrow : t.inDays(d);
     }
 
     function render() {
@@ -140,31 +169,40 @@
         : new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, 12);
       const info = moonInfo(at);
 
-      $('date').textContent = offset === 0 ? `Today · ${dateFmt.format(at)}` : dateFmt.format(at);
+      const phaseName = t.phases[info.phase.key];
+
+      $('date').textContent = offset === 0 ? `${t.today} · ${dateFmt.format(at)}` : dateFmt.format(at);
       $('today').hidden = offset === 0;
       $('lit').setAttribute('d', litPath(info.elongation));
-      $('phase').textContent = info.phase.name;
+      $('phase').textContent = phaseName;
       $('sub').textContent = info.phase.at
-        ? `Exact at ${timeFmt.format(info.phase.at)}`
-        : `${info.upcoming[0].name} ${relDays(info.upcoming[0].at - at)}`;
-      $('illum').textContent = `${Math.round(info.illumination * 100)}%`;
-      $('age').textContent = `${info.age.toFixed(1)} d`;
-      $('trend').textContent = info.waxing ? 'Waxing ↑' : 'Waning ↓';
+        ? t.exactAt(timeFmt.format(info.phase.at))
+        : `${t.phases[info.upcoming[0].key]} ${relDays(info.upcoming[0].at - at)}`;
+      $('illum').textContent = pctFmt.format(Math.round(info.illumination * 100) / 100);
+      $('age').textContent = `${ageFmt.format(info.age)} d`;
+      $('trend').textContent = info.waxing ? t.waxing : t.waning;
 
       $('upcoming').replaceChildren(...info.upcoming.map((p) => {
         const li = document.createElement('li');
         li.innerHTML = `<svg viewBox="-110 -110 220 220" aria-hidden="true">
             <circle r="100" fill="var(--dark)" stroke="var(--line)" stroke-width="8"/>
             <path d="${litPath(p.angle + 0.01)}" fill="var(--lit)"/></svg>
-          <span>${p.name}<span class="in"></span></span>
+          <span>${t.phases[p.key]}<span class="in"></span></span>
           <span class="when"></span>`;
         li.querySelector('.in').textContent = relDays(p.at - at);
         li.querySelector('.when').textContent = whenFmt.format(p.at);
         return li;
       }));
-      document.title = `${info.phase.name} · Moon Today`;
+      document.title = `${phaseName} · ${t.appName}`;
     }
 
+    document.querySelectorAll('[data-lang]').forEach((b) => {
+      b.onclick = () => {
+        try { localStorage.setItem('lang', b.dataset.lang); } catch {}
+        setLang(b.dataset.lang);
+        render();
+      };
+    });
     $('prev').onclick = () => { offset--; render(); };
     $('next').onclick = () => { offset++; render(); };
     $('today').onclick = () => { offset = 0; render(); };
@@ -174,6 +212,9 @@
       if (e.key === 't') $('today').click();
     });
 
+    let saved = null;
+    try { saved = localStorage.getItem('lang'); } catch {}
+    setLang(LANGS.includes(saved) ? saved : detectLang(navigator.languages));
     render();
     setInterval(() => { if (offset === 0) render(); }, 60000);
   </script>
