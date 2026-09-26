@@ -9,6 +9,7 @@ Today's moon phase: a drawing of the moon as it looks tonight, its phase name, h
 - The page opens on today and refreshes every minute.
 - **‹ / ›** (or the arrow keys) step a day back or forward. **Back to today** (or `T`) returns.
 - **Coming up** lists the next four principal phases with their local date and time.
+- **EN / NO** switches between English and Norwegian (bokmål). The page starts in Norwegian if your browser prefers nb, nn or no, and remembers your choice.
 
 ## How it works
 
@@ -29,5 +30,6 @@ python3 -m http.server 8080   # then visit http://localhost:8080
 ## Files
 
 - `moon.js`: the astronomy (elongation, illumination, age, phase times) and the SVG path for the lit part. It doesn't touch the page.
+- `i18n.js`: the English and Norwegian text, with phase names keyed by `moon.js` phase keys.
 - `index.html`: the UI.
-- `moon.test.mjs`: tests for `moon.js`, checked against published phase times. Run them with `TZ=Europe/Oslo node --test`.
+- `moon.test.mjs`: tests for `moon.js`, checked against published phase times. `i18n.test.mjs` checks that both languages are complete. Run them with `TZ=Europe/Oslo node --test`.
